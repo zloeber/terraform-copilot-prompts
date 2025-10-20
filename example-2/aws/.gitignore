@@ -1,0 +1,84 @@
+# Terraform files
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.tfvars
+!example.tfvars
+crash.log
+crash.*.log
+
+# AWS files
+.aws/
+aws-auth-configmap.yaml
+
+# Kubernetes files
+kubeconfig*
+*.kubeconfig
+.kube/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Docker files
+.dockerignore
+
+# Backup files
+*.bak
+*.backup
+
+# Temporary files
+temp/
+tmp/
+*.tmp
+
+# Graph files
+*.png
+*.svg
+terraform-graph.*
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Coverage files
+*.out
+coverage/
+
+# Build outputs
+build/
+dist/
+target/
+
+# Certificate files
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Security scan results
+tfsec-results.*
+checkov-results.*
+
+# Cost estimation files
+.infracost/
+infracost-report.*
+
+# Local scripts
+local-*.sh
+test-*.sh

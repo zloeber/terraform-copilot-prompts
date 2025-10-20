@@ -1,0 +1,6 @@
+data
+.env
+.venv
+.team*
+input/*
+output/

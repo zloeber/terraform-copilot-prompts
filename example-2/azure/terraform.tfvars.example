@@ -1,0 +1,44 @@
+# Example Terraform Variables Configuration
+# Copy this file to terraform.tfvars and modify as needed
+
+# Basic Configuration
+resource_prefix = "staging-k8s"
+location        = "East US"
+environment     = "staging"
+
+# Network Configuration
+vnet_address_space        = "10.0.0.0/16"
+aks_subnet_address_prefix = "10.0.1.0/24"
+pod_subnet_address_prefix = "10.0.2.0/23"
+service_cidr             = "10.1.0.0/16"
+dns_service_ip           = "10.1.0.10"
+
+# AKS Configuration
+kubernetes_version = "1.29"
+node_vm_size      = "Standard_D4s_v3"  # 4 vCPU, 16GB RAM
+min_node_count    = 2
+max_node_count    = 10
+max_pods_per_node = 30
+os_disk_size_gb   = 128
+
+# Container Registry Configuration
+acr_sku = "Premium"
+
+# Logging Configuration
+log_retention_days = 30
+
+# Security Configuration
+enable_private_cluster   = true
+enable_azure_policy     = true
+enable_monitoring       = true
+enable_workload_identity = true
+
+# Tags Configuration
+tags = {
+  Environment = "Staging"
+  Project     = "Kubernetes Infrastructure"
+  Owner       = "Platform Team"
+  ManagedBy   = "Terraform"
+  CostCenter  = "Engineering"
+  Workload    = "Container Platform"
+}

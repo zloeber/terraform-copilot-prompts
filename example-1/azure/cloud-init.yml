@@ -1,0 +1,156 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - nginx
+  - lvm2
+  - unzip
+  - curl
+
+write_files:
+  - path: /opt/setup-storage.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Wait for the data disk to be available
+      while [ ! -e /dev/sdc ]; do
+        sleep 1
+      done
+      
+      # Create physical volume
+      pvcreate /dev/sdc
+      
+      # Create volume group
+      vgcreate opt-vg /dev/sdc
+      
+      # Create logical volume
+      lvcreate -l 100%FREE -n opt-lv opt-vg
+      
+      # Format the logical volume
+      mkfs.ext4 /dev/opt-vg/opt-lv
+      
+      # Create mount point
+      mkdir -p /opt
+      
+      # Mount the volume
+      mount /dev/opt-vg/opt-lv /opt
+      
+      # Add to fstab for persistent mounting
+      echo '/dev/opt-vg/opt-lv /opt ext4 defaults 0 0' >> /etc/fstab
+
+  - path: /var/www/html/index.html
+    permissions: '0644'
+    content: |
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <title>WordPress Development Server - Azure</title>
+          <style>
+              body { font-family: Arial, sans-serif; margin: 40px; }
+              .container { max-width: 600px; margin: 0 auto; }
+              .server-info { background: #f4f4f4; padding: 20px; border-radius: 5px; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <h1>WordPress Development Environment - Azure</h1>
+              <div class="server-info">
+                  <h2>Server Information</h2>
+                  <p><strong>Hostname:</strong> <span id="hostname"></span></p>
+                  <p><strong>VM Name:</strong> <span id="vmname"></span></p>
+                  <p><strong>Zone:</strong> <span id="zone"></span></p>
+                  <p><strong>Local IP:</strong> <span id="localip"></span></p>
+              </div>
+              <p>This server is ready for WordPress development on Azure!</p>
+          </div>
+          
+          <script>
+              // Get VM metadata
+              fetch('http://169.254.169.254/metadata/instance?api-version=2021-02-01', {
+                  headers: { 'Metadata': 'true' }
+              })
+              .then(response => response.json())
+              .then(data => {
+                  document.getElementById('vmname').textContent = data.compute.name;
+                  document.getElementById('zone').textContent = data.compute.zone || 'N/A';
+                  document.getElementById('localip').textContent = data.network.interface[0].ipv4.ipAddress[0].privateIpAddress;
+              })
+              .catch(error => {
+                  console.error('Error fetching metadata:', error);
+              });
+              
+              document.getElementById('hostname').textContent = window.location.hostname;
+          </script>
+      </body>
+      </html>
+
+  - path: /etc/nginx/sites-available/default
+    permissions: '0644'
+    content: |
+      server {
+          listen 80 default_server;
+          listen [::]:80 default_server;
+
+          root /var/www/html;
+          index index.html index.htm index.nginx-debian.html;
+
+          server_name _;
+
+          location / {
+              try_files $uri $uri/ =404;
+          }
+
+          # Health check endpoint for Application Gateway
+          location /health {
+              access_log off;
+              return 200 "healthy\n";
+              add_header Content-Type text/plain;
+          }
+      }
+
+  - path: /opt/azure-storage-setup.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Azure Storage configuration
+      STORAGE_ACCOUNT="${storage_account_name}"
+      CONTAINER_NAME="${container_name}"
+      
+      # Create configuration directory
+      mkdir -p /opt/azure-config
+      
+      # Save storage configuration
+      echo "STORAGE_ACCOUNT=$STORAGE_ACCOUNT" > /opt/azure-config/storage-info
+      echo "CONTAINER_NAME=$CONTAINER_NAME" >> /opt/azure-config/storage-info
+      
+      # Install Azure CLI
+      curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+      
+      # Test Azure storage access using managed identity
+      echo "#!/bin/bash" > /opt/azure-config/test-storage-access.sh
+      echo "source /opt/azure-config/storage-info" >> /opt/azure-config/test-storage-access.sh
+      echo "echo 'Testing Azure Storage access to: \$STORAGE_ACCOUNT/\$CONTAINER_NAME'" >> /opt/azure-config/test-storage-access.sh
+      echo "az storage blob list --container-name \$CONTAINER_NAME --account-name \$STORAGE_ACCOUNT --auth-mode login 2>/dev/null && echo 'Storage access successful' || echo 'Storage access failed'" >> /opt/azure-config/test-storage-access.sh
+      chmod +x /opt/azure-config/test-storage-access.sh
+
+runcmd:
+  # Set up the data disk
+  - /opt/setup-storage.sh
+  
+  # Configure and start nginx
+  - systemctl enable nginx
+  - nginx -t
+  - systemctl start nginx
+  
+  # Set up Azure storage access
+  - /opt/azure-storage-setup.sh
+  
+  # Install Azure Monitor agent
+  - wget https://aka.ms/downloadazclilinux -O /tmp/azure-cli.deb
+  - dpkg -i /tmp/azure-cli.deb || apt-get install -f -y
+  
+  # Log completion
+  - echo "Cloud-init setup completed at $(date)" > /var/log/cloud-init-complete.log
+
+final_message: "WordPress development VM setup completed successfully!"

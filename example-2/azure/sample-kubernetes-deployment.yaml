@@ -1,0 +1,191 @@
+# Sample Kubernetes Deployment for AKS Cluster
+# This demonstrates how to deploy applications to your private AKS cluster
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: sample-app
+  labels:
+    app: sample-app
+    environment: staging
+
+---
+
+# Sample application deployment using ACR image
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample-app
+  namespace: sample-app
+  labels:
+    app: sample-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: sample-app
+  template:
+    metadata:
+      labels:
+        app: sample-app
+    spec:
+      # Use application node pool (has workload=apps:NoSchedule taint)
+      tolerations:
+      - key: "workload"
+        operator: "Equal"
+        value: "apps"
+        effect: "NoSchedule"
+      
+      nodeSelector:
+        workload: applications
+      
+      containers:
+      - name: sample-app
+        # Replace with your ACR image
+        image: <acr-name>.azurecr.io/sample-app:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        
+        env:
+        - name: ENVIRONMENT
+          value: "staging"
+        
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+
+# Internal service (private load balancer)
+apiVersion: v1
+kind: Service
+metadata:
+  name: sample-app-service
+  namespace: sample-app
+  annotations:
+    # Use internal load balancer
+    service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+    # Specify subnet for load balancer (optional)
+    service.beta.kubernetes.io/azure-load-balancer-internal-subnet: "aks-nodes-subnet"
+spec:
+  type: LoadBalancer
+  selector:
+    app: sample-app
+  ports:
+  - port: 80
+    targetPort: 8080
+    protocol: TCP
+    name: http
+
+---
+
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: sample-app-hpa
+  namespace: sample-app
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: sample-app
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+
+---
+
+# Network Policy for pod-to-pod communication
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: sample-app-network-policy
+  namespace: sample-app
+spec:
+  podSelector:
+    matchLabels:
+      app: sample-app
+  policyTypes:
+  - Ingress
+  - Egress
+  
+  ingress:
+  # Allow traffic from load balancer
+  - from: []
+    ports:
+    - protocol: TCP
+      port: 8080
+  
+  egress:
+  # Allow DNS resolution
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+  # Allow HTTPS outbound for API calls
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443
+
+---
+
+# ConfigMap for application configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: sample-app-config
+  namespace: sample-app
+data:
+  app.properties: |
+    environment=staging
+    log.level=INFO
+    database.pool.size=10
+    cache.ttl=300
+
+---
+
+# Secret for sensitive configuration (create separately)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: sample-app-secrets
+  namespace: sample-app
+type: Opaque
+data:
+  # Base64 encoded values
+  # Use kubectl create secret or Azure Key Vault integration
+  database-password: ""
+  api-key: ""
